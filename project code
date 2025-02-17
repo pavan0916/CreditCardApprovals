@@ -1,0 +1,76 @@
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.svm import SVC
+from xgboost import XGBClassifier
+from sklearn.metrics import accuracy_score, classification_report, roc_auc_score, confusion_matrix
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.metrics import roc_curve, auc
+
+data = pd.read_csv('credit_card_approval_data.csv')
+
+data = data.fillna(data.mean())  # Example: fill numeric NaNs with column means
+
+label_encoder = LabelEncoder()
+for column in data.select_dtypes(include=['object']).columns:
+    data[column] = label_encoder.fit_transform(data[column])
+
+features = data.drop('ApprovalStatus', axis=1)
+target = data['ApprovalStatus']
+
+scaler = StandardScaler()
+features_scaled = scaler.fit_transform(features)
+
+X_train, X_test, y_train, y_test = train_test_split(features_scaled, target, test_size=0.2, random_state=42)
+
+
+log_reg = LogisticRegression()
+log_reg.fit(X_train, y_train)
+
+rf_model = RandomForestClassifier(n_estimators=100, max_depth=10, random_state=42)
+rf_model.fit(X_train, y_train)
+
+svm_model = SVC(kernel='linear', probability=True)
+svm_model.fit(X_train, y_train)
+
+xgb_model = XGBClassifier(learning_rate=0.1, max_depth=6, n_estimators=100, random_state=42)
+xgb_model.fit(X_train, y_train)
+
+models = {'Logistic Regression': log_reg, 'Random Forest': rf_model, 'SVM': svm_model, 'XGBoost': xgb_model}
+
+for model_name, model in models.items():
+    y_pred = model.predict(X_test)
+    y_pred_proba = model.predict_proba(X_test)[:, 1] if hasattr(model, "predict_proba") else None
+    accuracy = accuracy_score(y_test, y_pred)
+    roc_auc = roc_auc_score(y_test, y_pred_proba) if y_pred_proba is not None else 'N/A'
+    print(f"{model_name} - Accuracy: {accuracy:.4f}, AUC-ROC: {roc_auc}")
+    print(classification_report(y_test, y_pred))
+
+for model_name, model in models.items():
+    y_pred = model.predict(X_test)
+    conf_matrix = confusion_matrix(y_test, y_pred)
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(conf_matrix, annot=True, fmt='d', cmap='Blues')
+    plt.title(f"Confusion Matrix - {model_name}")
+    plt.xlabel("Predicted")
+    plt.ylabel("Actual")
+    plt.show()
+
+
+plt.figure(figsize=(10, 8))
+for model_name, model in models.items():
+    if hasattr(model, "predict_proba"):
+        y_pred_proba = model.predict_proba(X_test)[:, 1]
+        fpr, tpr, _ = roc_curve(y_test, y_pred_proba)
+        roc_auc = auc(fpr, tpr)
+        plt.plot(fpr, tpr, label=f'{model_name} (AUC = {roc_auc:.2f})')
+plt.plot([0, 1], [0, 1], 'k--')
+plt.title("AUC-ROC Curve")
+plt.xlabel("False Positive Rate")
+plt.ylabel("True Positive Rate")
+plt.legend(loc="lower right")
+plt.show()
